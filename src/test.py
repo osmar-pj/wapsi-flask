@@ -24,31 +24,22 @@ df_users = pd.DataFrame(list(users.find()))
 # DATA
 
 datas = db['datas']
+bigdata = db['bigdatas']
 
 # VETA VERITO CH738-41
-serie = 'WAPSI-660'
-
-# VETA JESUS CH485-16
-# serie = 'WAPSI-660'
-
-# serie = 'WAPSI-4490'
-# serie = 'WAPSI--9895'
-
-name = 'CO'
-
+start = 1711429200000
+end = 1712001131803
+start_seconds = int(start) / 1000
+end_seconds = int(end) / 1000
+instrumentId = '66032cbb6918c9ebc1cae897'
+df = pd.DataFrame(list(bigdata.find({'instrumentId': instrumentId})))
 ## POR SEMANA
 
-# start = 1708491600000
-# end = 1709096399000
 
-# start_seconds = int(start) / 1000
-# end_seconds = int(end) / 1000
-# date_start = datetime.fromtimestamp(start_seconds)
-# date_end = datetime.fromtimestamp(end_seconds)
-# start_tz = pytz.timezone('America/Lima').localize(date_start)
-# end_tz = pytz.timezone('America/Lima').localize(date_end)
-# df_datas = pd.DataFrame(list(datas.find({'serie': serie, 'name': name, 'createdAt': {'$gte': start_tz, '$lte': end_tz}})))
-
+date_start = datetime.fromtimestamp(start_seconds)
+date_end = datetime.fromtimestamp(end_seconds)
+start_tz = pytz.timezone('America/Lima').localize(date_start)
+end_tz = pytz.timezone('America/Lima').localize(date_end)
 ## POR MES
 
 nro_month = '1-2024'
@@ -61,7 +52,6 @@ end_date = end_date.replace(hour=23, minute=59, second=59)
 start_tz = pytz.timezone('America/Lima').localize(start_date)
 end_tz = pytz.timezone('America/Lima').localize(end_date)
 df_datas = pd.DataFrame(list(datas.find({'serie': serie, 'name': name, 'createdAt': {'$gte': start_tz, '$lte': end_tz}})))
-
 
 ## RESTO
 

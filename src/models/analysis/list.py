@@ -1,5 +1,4 @@
 from flask import Flask, jsonify, request, Response
-from flask_pymongo import PyMongo
 from datetime import datetime
 from pymongo import MongoClient
 from datetime import datetime, timedelta

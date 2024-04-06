@@ -1,5 +1,4 @@
 from flask import Flask, jsonify, request, Response
-from flask_pymongo import PyMongo
 from datetime import datetime
 from pymongo import MongoClient
 from datetime import datetime, timedelta
@@ -40,6 +39,7 @@ datas = db['datas']
 # OLD VERSION - UPDATED
 @app.route('/analysis', methods=['GET'])
 def get_analysis():
+    datas = db['datas']
     serie = request.args.get('serie')
     name = request.args.get('name')
     start = request.args.get('start')
@@ -111,6 +111,78 @@ def get_analysis():
     dfinal_dict = df_final.to_dict(orient='records')
     dbars_dict = dbars.to_dict(orient='records')
     return jsonify({'mean': mean, 'data_final': dfinal_dict, 'bars': dbars_dict})
+
+@app.route('/basicAnalysis', methods=['POST'])
+def basicAnalysis():
+    try:
+        result = request.get_json()
+        dfRes = pd.DataFrame(result)
+        dfRes['datetime'] = pd.to_datetime(dfRes['ts'], unit='s')
+        _df = dfRes[['datetime','value']].copy()
+        df = _df.resample('1min',on='datetime').mean().ffill().bfill()
+        df['ts'] = df.index.astype(np.int64) // 10**9
+        df.reset_index(drop=True, inplace=True)
+        data = df.to_dict(orient='records')
+        return jsonify({'data': data})
+    except Exception as e:
+        return jsonify({'message': str(e)})
+
+@app.route('/advancedAnalysis', methods=['POST'])
+def advancedAnalysis():
+    try:
+        result = request.get_json()
+        df = pd.DataFrame(result)
+        df['datetime'] = pd.to_datetime(df['ts'], unit='s')
+        dbars = df[["datetime", "color"]].copy()
+        dbars['x'] = dbars['datetime'].dt.strftime("%H:%M")
+        dbars['y'] = dbars['datetime'].dt.strftime("%Y-%m-%d")
+        dbars.drop('datetime', axis = 1)
+        dbars = dbars[["x", "y", "color"]]
+        dbars['color_diff'] = dbars['color'].ne(dbars['color'].shift())
+        dbars['color_diff'] = dbars['color_diff'].cumsum()
+        dbars = dbars.groupby(['y', 'color_diff', 'color']).last().reset_index()
+
+        coordenadas = []
+        alarma = False
+        parameter = 25
+        for i in range(len(df)):
+            if df['value'][i] >= parameter and not alarma:
+                alarma = True
+                coordenadas.append([df['datetime'][i], df['value'][i]])
+            elif df['value'][i] < parameter and alarma:
+                alarma = False
+                coordenadas.append([df['datetime'][i], df['value'][i]])
+        diferencia = []
+        start_df = []
+        end_df = []
+        mean = 0
+        for i in range(0, len(coordenadas), 2):
+            if i + 1 < len(coordenadas):
+                s = coordenadas[i][0]
+                e = coordenadas[i + 1][0]
+                time_dif = e - s
+                diferencia.append((time_dif))
+                start_df.append(s)
+                end_df.append(e)
+        df_final = pd.DataFrame({'start': start_df, 'end': end_df, 'duration': diferencia})
+
+        if len(df_final) > 0:
+            df_final['duration'] = df_final['duration'].dt.total_seconds() / 60
+            df_final['tstart'] = df_final['start'].astype('int64') / 1e6
+            df_final['tend'] = df_final['end'].astype('int64') / 1e6
+            df_final['day'] = df_final['start'].dt.day_name()
+            df_final['day'] = df_final['day'].replace(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo'])
+            df_final = df_final.query('duration > 20')
+            if len(df_final) > 0:
+                df_final['timestart'] = pd.to_datetime(df_final['start'])
+                df_final = df_final.reset_index(drop=True)
+                mean = df_final['duration'].mean()
+            
+        dfinal_dict = df_final.to_dict(orient='records')
+        dbars_dict = dbars.to_dict(orient='records')
+        return jsonify({'mean': mean, 'data_final': dfinal_dict, 'bars': dbars_dict})
+    except Exception as e:
+        return jsonify({'message': str(e)})
 
 @app.errorhandler(404)
 def not_found(error=None):
