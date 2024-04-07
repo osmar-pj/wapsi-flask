@@ -117,6 +117,8 @@ def basicAnalysis():
     try:
         result = request.get_json()
         dfRes = pd.DataFrame(result)
+        if len(dfRes) == 0:
+            return jsonify({'data': []})
         dfRes['datetime'] = pd.to_datetime(dfRes['ts'], unit='s')
         _df = dfRes[['datetime','value']].copy()
         df = _df.resample('1min',on='datetime').mean().ffill().bfill()
