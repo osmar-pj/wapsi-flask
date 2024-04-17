@@ -135,6 +135,7 @@ def advancedAnalysis():
         result = request.get_json()
         df = pd.DataFrame(result)
         df['datetime'] = pd.to_datetime(df['ts'], unit='s')
+        # df['datetime'] = df['datetime'].dt.tz_localize('UTC').dt.tz_convert('America/Lima')
         dbars = df[["datetime", "color"]].copy()
         dbars['x'] = dbars['datetime'].dt.strftime("%H:%M")
         dbars['y'] = dbars['datetime'].dt.strftime("%Y-%m-%d")
