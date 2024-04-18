@@ -190,7 +190,20 @@ def basicAnalysis():
 #         return jsonify({'message': str(e)})
 
 #region NEW VERSION
-def complete_days(dbars, start, end):
+# def complete_days(dbars, start, end):
+#     start_date = datetime.fromtimestamp(start)
+#     end_date = datetime.fromtimestamp(end)
+#     date_range = pd.date_range(start=start_date, end=end_date, freq='D')
+#     missing_days = pd.DataFrame({'datetime': date_range})
+#     missing_days['y'] = missing_days['datetime'].dt.strftime('%Y-%m-%d')
+#     missing_days = missing_days[~missing_days['y'].isin(dbars['y'])]
+#     missing_days['x'] = '23:59'
+#     missing_days['color'] = '#898989'
+#     dbars = pd.concat([dbars, missing_days[['x', 'y', 'color']]], ignore_index=True)
+#     dbars = dbars.sort_values(by=['y', 'x']).reset_index(drop=True)
+#     return dbars
+
+def complete_missing_days(dbars, start, end):
     start_date = datetime.fromtimestamp(start)
     end_date = datetime.fromtimestamp(end)
     date_range = pd.date_range(start=start_date, end=end_date, freq='D')
@@ -199,8 +212,13 @@ def complete_days(dbars, start, end):
     missing_days = missing_days[~missing_days['y'].isin(dbars['y'])]
     missing_days['x'] = '23:59'
     missing_days['color'] = '#898989'
+    if not missing_days.empty:
+        missing_days.loc[missing_days.index[:-1], 'x'] = '23:59'
+        missing_days.loc[missing_days.index[:-1], 'color'] = '#898989'
+    
     dbars = pd.concat([dbars, missing_days[['x', 'y', 'color']]], ignore_index=True)
     dbars = dbars.sort_values(by=['y', 'x']).reset_index(drop=True)
+    
     return dbars
 
 def complete_empty(start, end):
