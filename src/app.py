@@ -203,21 +203,25 @@ def basicAnalysis():
 #     dbars = dbars.sort_values(by=['y', 'x']).reset_index(drop=True)
 #     return dbars
 
-def complete_missing_days(dbars, start, end):
+def complete_days(dbars, start, end):
     start_date = datetime.fromtimestamp(start)
     end_date = datetime.fromtimestamp(end)
     date_range = pd.date_range(start=start_date, end=end_date, freq='D')
     missing_days = pd.DataFrame({'datetime': date_range})
     missing_days['y'] = missing_days['datetime'].dt.strftime('%Y-%m-%d')
-    missing_days = missing_days[~missing_days['y'].isin(dbars['y'])]
-    missing_days['x'] = '23:59'
-    missing_days['color'] = '#898989'
-    if not missing_days.empty:
-        missing_days.loc[missing_days.index[:-1], 'x'] = '23:59'
-        missing_days.loc[missing_days.index[:-1], 'color'] = '#898989'
     
-    dbars = pd.concat([dbars, missing_days[['x', 'y', 'color']]], ignore_index=True)
-    dbars = dbars.sort_values(by=['y', 'x']).reset_index(drop=True)
+    if not dbars.empty:
+        existing_days = dbars.loc[dbars['x'] == '23:59', 'y'].unique()
+        missing_days = missing_days[~missing_days['y'].isin(existing_days)]
+        missing_days['x'] = '23:59'
+        missing_days['color'] = '#898989'
+        if missing_days['y'].iloc[-1] == end_date.strftime('%Y-%m-%d'):
+            missing_days = missing_days.iloc[:-1]
+        
+        dbars = pd.concat([dbars, missing_days[['x', 'y', 'color']]], ignore_index=True)
+        dbars = dbars.sort_values(by=['y']).reset_index(drop=True)
+    else:
+        dbars = missing_days[['x', 'y', 'color']]
     
     return dbars
 
@@ -255,14 +259,14 @@ def advancedAnalysis():
     dbars['diff'] = dbars['datetime'].diff().dt.total_seconds().div(60).fillna(0)
     dbars['group'] = (dbars['color'] != dbars['color'].shift()).cumsum()
 
-    dbars = dbars.groupby(['group', 'color']).agg({'diff': 'sum', 'datetime': 'min'}).reset_index()
+    dbars = dbars.groupby(['group', 'color']).agg({'diff': 'sum', 'datetime': 'max'}).reset_index()
     dbars = dbars.query('diff >= 120 or color != "#898989"')
     dbars['x'] = dbars['datetime'].dt.strftime('%H:%M')
     dbars['y'] = dbars['datetime'].dt.strftime('%Y-%m-%d')
     dbars = dbars.drop(['group', 'diff'], axis=1)
     dbars = dbars.reset_index(drop=True)
     dbars['group'] = (dbars['color'] != dbars['color'].shift()).cumsum()
-    dbars = dbars.groupby(['group', 'color']).agg({'datetime': 'min'}).reset_index()
+    dbars = dbars.groupby(['group', 'color']).agg({'datetime': 'max'}).reset_index()
     dbars['x'] = dbars['datetime'].dt.strftime('%H:%M')
     dbars['y'] = dbars['datetime'].dt.strftime('%Y-%m-%d')
     dbars = dbars[['x', 'y', 'color']]
