@@ -16,31 +16,31 @@ db = client['wapsi']
 
 pd.set_option('display.max_columns', None)
 
-# USUARIOS
+#region USUARIOS
 
 users = db['users']
 df_users = pd.DataFrame(list(users.find()))
 
-# DATA
+#region DATA
 
 datas = db['datas']
 bigdata = db['bigdatas']
 
-# VETA VERITO CH738-41
+#region VETA VERITO CH738-41
 start = 1711429200000
 end = 1712001131803
 start_seconds = int(start) / 1000
 end_seconds = int(end) / 1000
 instrumentId = '66032cbb6918c9ebc1cae897'
 df = pd.DataFrame(list(bigdata.find({'instrumentId': instrumentId})))
-## POR SEMANA
+#region POR SEMANA
 
 
 date_start = datetime.fromtimestamp(start_seconds)
 date_end = datetime.fromtimestamp(end_seconds)
 start_tz = pytz.timezone('America/Lima').localize(date_start)
 end_tz = pytz.timezone('America/Lima').localize(date_end)
-## POR MES
+#region POR MES
 
 nro_month = '1-2024'
 
@@ -53,7 +53,7 @@ start_tz = pytz.timezone('America/Lima').localize(start_date)
 end_tz = pytz.timezone('America/Lima').localize(end_date)
 df_datas = pd.DataFrame(list(datas.find({'serie': serie, 'name': name, 'createdAt': {'$gte': start_tz, '$lte': end_tz}})))
 
-## RESTO
+#region RESTO
 
 df_devices = pd.DataFrame(list(df_datas['devices']))
 df_devices['timestamp'] = df_datas['timestamp']
@@ -130,7 +130,7 @@ df_voladuras['DIA'] = df_voladuras['DIA'].apply(lambda x: 1 if x > 0 else 0)
 df_voladuras['NOCHE'] = df_voladuras['NOCHE'].apply(lambda x: 1 if x > 0 else 0)
 df_voladuras['transcurred'] = df_voladuras['duration'].apply(lambda x: f'{int(x // 60)}h {int(x % 60)}m')
 
-# POR SEMANA
+#region POR SEMANA
 # df_voladuras['grouping'] = pd.to_datetime(df_voladuras['grouping'])
 # df_voladuras = df_voladuras.set_index('grouping')
 # df_voladuras = df_voladuras.resample('D').asfreq()
@@ -140,7 +140,7 @@ df_voladuras['transcurred'] = df_voladuras['duration'].apply(lambda x: f'{int(x 
 # df_voladuras['transcurred'] = df_voladuras['transcurred'].fillna('0h 0m')
 # df_voladuras = df_voladuras.reset_index()
 
-# POR MES
+#region POR MES
 df_voladuras['grouping'] = pd.to_datetime(df_voladuras['grouping'])
 df_voladuras = df_voladuras.set_index('grouping')
 df_voladuras = df_voladuras.resample('D').asfreq()
@@ -157,7 +157,7 @@ df_voladuras['DIA'] = df_voladuras['DIA'].astype(int)
 df_voladuras['NOCHE'] = df_voladuras['NOCHE'].astype(int)
 
 
-# CALCULOS
+#region CALCULOS
 
 vol_dia = df_voladuras['DIA'].sum()
 vol_noche = df_voladuras['NOCHE'].sum()

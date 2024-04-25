@@ -18,7 +18,6 @@ app = Flask(__name__)
 
 client = MongoClient(os.getenv('MONGO_URI'))
 db = client['wapsi']
-# datas = db['datas']
 datas = db['bigdatas']
 
 # NEW VERSION MONTH-WEEK DASHBOARD
@@ -131,97 +130,27 @@ def basicAnalysis():
     except Exception as e:
         return jsonify({'message': str(e)})
 
-#region OLD VERSION
-# @app.route('/advancedAnalysis', methods=['POST'])
-# def advancedAnalysis():
-#     try:
-#         result = request.get_json()
-#         df = pd.DataFrame(result)
-#         df['datetime'] = pd.to_datetime(df['ts'], unit='s')
-#         dbars = df[["datetime", "color"]].copy()
-#         dbars['x'] = dbars['datetime'].dt.strftime("%H:%M")
-#         dbars['y'] = dbars['datetime'].dt.strftime("%Y-%m-%d")
-#         dbars.drop('datetime', axis = 1)
-#         dbars = dbars[["x", "y", "color"]]
-#         dbars['color_diff'] = dbars['color'].ne(dbars['color'].shift())
-#         dbars['color_diff'] = dbars['color_diff'].cumsum()
-#         dbars = dbars.groupby(['y', 'color_diff', 'color']).last().reset_index()
+#region FUNCTIONS
 
-#         coordenadas = []
-#         alarma = False
-#         parameter = 25
-#         for i in range(len(df)):
-#             if df['value'][i] >= parameter and not alarma:
-#                 alarma = True
-#                 coordenadas.append([df['datetime'][i], df['value'][i]])
-#             elif df['value'][i] < parameter and alarma:
-#                 alarma = False
-#                 coordenadas.append([df['datetime'][i], df['value'][i]])
-#         diferencia = []
-#         start_df = []
-#         end_df = []
-#         mean = 0
-#         for i in range(0, len(coordenadas), 2):
-#             if i + 1 < len(coordenadas):
-#                 s = coordenadas[i][0]
-#                 e = coordenadas[i + 1][0]
-#                 time_dif = e - s
-#                 diferencia.append((time_dif))
-#                 start_df.append(s)
-#                 end_df.append(e)
-#         df_final = pd.DataFrame({'start': start_df, 'end': end_df, 'duration': diferencia})
-
-#         if len(df_final) > 0:
-#             df_final['duration'] = df_final['duration'].dt.total_seconds() / 60
-#             df_final['tstart'] = df_final['start'].astype('int64') / 1e6
-#             df_final['tend'] = df_final['end'].astype('int64') / 1e6
-#             df_final['day'] = df_final['start'].dt.day_name()
-#             df_final['day'] = df_final['day'].replace(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo'])
-#             df_final = df_final.query('duration > 20')
-#             if len(df_final) > 0:
-#                 df_final['timestart'] = pd.to_datetime(df_final['start'])
-#                 df_final = df_final.reset_index(drop=True)
-#                 mean = df_final['duration'].mean()
-            
-#         dfinal_dict = df_final.to_dict(orient='records')
-#         dbars_dict = dbars.to_dict(orient='records')
-#         return jsonify({'mean': mean, 'data_final': dfinal_dict, 'bars': dbars_dict})
-#     except Exception as e:
-#         return jsonify({'message': str(e)})
-
-#region NEW VERSION
-# def complete_days(dbars, start, end):
-#     start_date = datetime.fromtimestamp(start)
-#     end_date = datetime.fromtimestamp(end)
-#     date_range = pd.date_range(start=start_date, end=end_date, freq='D')
-#     missing_days = pd.DataFrame({'datetime': date_range})
-#     missing_days['y'] = missing_days['datetime'].dt.strftime('%Y-%m-%d')
-#     missing_days = missing_days[~missing_days['y'].isin(dbars['y'])]
-#     missing_days['x'] = '23:59'
-#     missing_days['color'] = '#898989'
-#     dbars = pd.concat([dbars, missing_days[['x', 'y', 'color']]], ignore_index=True)
-#     dbars = dbars.sort_values(by=['y', 'x']).reset_index(drop=True)
-#     return dbars
-
-def complete_days(dbars, start, end):
+def complete_data(dbars, start, end):
     start_date = datetime.fromtimestamp(start)
     end_date = datetime.fromtimestamp(end)
     date_range = pd.date_range(start=start_date, end=end_date, freq='D')
-    missing_days = pd.DataFrame({'datetime': date_range})
-    missing_days['y'] = missing_days['datetime'].dt.strftime('%Y-%m-%d')
-    
-    if not dbars.empty:
-        existing_days = dbars.loc[dbars['x'] == '23:59', 'y'].unique()
-        missing_days = missing_days[~missing_days['y'].isin(existing_days)]
-        missing_days['x'] = '23:59'
-        missing_days['color'] = '#898989'
-        if missing_days['y'].iloc[-1] == end_date.strftime('%Y-%m-%d'):
-            missing_days = missing_days.iloc[:-1]
+    modified_rows = []
+
+    for date in date_range:
+        df_date = dbars[dbars['y'] == date.strftime('%Y-%m-%d')]
         
-        dbars = pd.concat([dbars, missing_days[['x', 'y', 'color']]], ignore_index=True)
-        dbars = dbars.sort_values(by=['y']).reset_index(drop=True)
-    else:
-        dbars = missing_days[['x', 'y', 'color']]
+        if date == date_range[-1] and not df_date.empty:
+            continue
+        
+        if '23:59' not in df_date['x'].values:
+            modified_rows.append({'color': '#898989', 'x': '23:59', 'y': date.strftime('%Y-%m-%d')})
+
+    df_modified_rows = pd.DataFrame(modified_rows)
+    dbars = pd.concat([dbars, df_modified_rows], ignore_index=True)
+    dbars = dbars.reset_index(drop=True)
+    dbars = dbars[['y', 'color', 'x']]
     
     return dbars
 
@@ -235,6 +164,7 @@ def complete_empty(start, end):
     missing_days['color'] = '#898989'
     return missing_days[['y', 'color', 'x']]
 
+#region VERSION STABLE ADVANCED ANALYSIS
 @app.route('/advancedAnalysis', methods=['POST'])
 def advancedAnalysis():
     
@@ -245,7 +175,7 @@ def advancedAnalysis():
     
     if len(data) == 0:
         dbars = complete_empty(start, end)
-        dbars_dict = dbars.to_dict(orient='records')    
+        dbars_dict = dbars.to_dict(orient='records')
         return jsonify({'mean': 0, 'data_final': [], 'bars': dbars_dict})
     
     df_data = pd.DataFrame(data)
@@ -253,29 +183,21 @@ def advancedAnalysis():
     df_data['datetime'] = pd.to_datetime(df_data['ts'], unit='s')
     df_data['datetime'] = df_data['datetime'].dt.tz_localize('UTC').dt.tz_convert('America/Lima')
 
-    dbars = df_data[['datetime', 'color']].copy()
+    dbars = df_data[["datetime", "color"]].copy()
+
     dbars = dbars.resample('1min',on='datetime').last().reset_index()
     dbars['color'] = dbars['color'].fillna('#898989')
-    dbars['diff'] = dbars['datetime'].diff().dt.total_seconds().div(60).fillna(0)
-    dbars['group'] = (dbars['color'] != dbars['color'].shift()).cumsum()
 
-    dbars = dbars.groupby(['group', 'color']).agg({'diff': 'sum', 'datetime': 'max'}).reset_index()
-    dbars = dbars.query('diff >= 120 or color != "#898989"')
-    dbars['x'] = dbars['datetime'].dt.strftime('%H:%M')
-    dbars['y'] = dbars['datetime'].dt.strftime('%Y-%m-%d')
-    dbars = dbars.drop(['group', 'diff'], axis=1)
-    dbars = dbars.reset_index(drop=True)
-    dbars['group'] = (dbars['color'] != dbars['color'].shift()).cumsum()
-    dbars = dbars.groupby(['group', 'color']).agg({'datetime': 'max'}).reset_index()
-    dbars['x'] = dbars['datetime'].dt.strftime('%H:%M')
-    dbars['y'] = dbars['datetime'].dt.strftime('%Y-%m-%d')
-    dbars = dbars[['x', 'y', 'color']]
+    dbars['x'] = dbars['datetime'].dt.strftime("%H:%M")
+    dbars['y'] = dbars['datetime'].dt.strftime("%Y-%m-%d")
     dbars['color_diff'] = dbars['color'].ne(dbars['color'].shift())
     dbars['color_diff'] = dbars['color_diff'].cumsum()
     dbars = dbars.groupby(['y', 'color_diff', 'color']).last().reset_index()
-    dbars = dbars.drop(['color_diff'], axis=1)
-    
-    dbars_completed = complete_days(dbars, start, end)
+    dbars['time_diff'] = dbars['datetime'].diff().dt.total_seconds() / 60
+    # dbars = dbars[(dbars['color'] != '#898989') | (dbars['time_diff'] != 1)]
+    dbars = dbars[(dbars['color'] != '#898989') | (dbars['time_diff'] >= 15)]
+        
+    dbars_completed = complete_data(dbars, start, end)
     
     coordenadas = []
     alarma = False
@@ -316,6 +238,171 @@ def advancedAnalysis():
     dfinal_dict = df_final.to_dict(orient='records')
     dbars_dict = dbars_completed.to_dict(orient='records')
     return jsonify({'mean': mean, 'data_final': dfinal_dict, 'bars': dbars_dict})
+
+
+#region FUTURE ANALISIS ADVANCED
+# @app.route('/advancedAnalysis', methods=['POST'])
+# def advancedAnalysis():
+    
+#     result = request.get_json()
+#     start = int(result['startTs'])
+#     end = int(result['endTs'])
+#     data = result['result']
+    
+#     if len(data) == 0:
+#         dbars = complete_empty(start, end)
+#         dbars_dict = dbars.to_dict(orient='records')
+#         return jsonify({'mean': 0, 'data_final': [], 'bars': dbars_dict, 'voladuras': [], 'turnos': [], 'promedios': {}})
+    
+#     df_data = pd.DataFrame(data)
+    
+#     df_data['datetime'] = pd.to_datetime(df_data['ts'], unit='s')
+#     df_data['datetime'] = df_data['datetime'].dt.tz_localize('UTC').dt.tz_convert('America/Lima')
+
+#     dbars = df_data[["datetime", "color"]].copy()
+
+#     dbars = dbars.resample('1min',on='datetime').last().reset_index()
+#     dbars['color'] = dbars['color'].fillna('#898989')
+
+#     dbars['x'] = dbars['datetime'].dt.strftime("%H:%M")
+#     dbars['y'] = dbars['datetime'].dt.strftime("%Y-%m-%d")
+#     dbars['color_diff'] = dbars['color'].ne(dbars['color'].shift())
+#     dbars['color_diff'] = dbars['color_diff'].cumsum()
+#     dbars = dbars.groupby(['y', 'color_diff', 'color']).last().reset_index()
+#     dbars['time_diff'] = dbars['datetime'].diff().dt.total_seconds() / 60
+#     dbars = dbars[(dbars['color'] != '#898989') | (dbars['time_diff'] != 1)]
+        
+#     dbars_completed = complete_data(dbars, start, end)
+    
+#     coordenadas = []
+#     alarma = False
+#     parameter = 25
+#     for i in range(len(df_data)):
+#         if df_data['value'][i] >= parameter and not alarma:
+#             alarma = True
+#             coordenadas.append([df_data['datetime'][i], df_data['value'][i]])
+#         elif df_data['value'][i] < parameter and alarma:
+#             alarma = False
+#             coordenadas.append([df_data['datetime'][i], df_data['value'][i]])
+#     diferencia = []
+#     start_df = []
+#     end_df = []
+#     mean = 0
+#     for i in range(0, len(coordenadas), 2):
+#         if i + 1 < len(coordenadas):
+#             s = coordenadas[i][0]
+#             e = coordenadas[i + 1][0]
+#             time_dif = e - s
+#             diferencia.append((time_dif))
+#             start_df.append(s)
+#             end_df.append(e)
+#     df_final = pd.DataFrame({'start': start_df, 'end': end_df, 'duration': diferencia})
+    
+#     if len(df_final) > 0:
+#         df_final['duration'] = df_final['duration'].dt.total_seconds() / 60
+#         df_final['tstart'] = df_final['start'].astype('int64') / 1e6
+#         df_final['tend'] = df_final['end'].astype('int64') / 1e6
+#         df_final['day'] = df_final['start'].dt.day_name()
+#         df_final['day'] = df_final['day'].replace(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo'])
+#         df_final = df_final.query('duration > 20')
+#         if len(df_final) > 0:
+#             df_final['timestart'] = pd.to_datetime(df_final['start'])
+#             df_final = df_final.reset_index(drop=True)
+#             mean = df_final['duration'].mean()
+            
+#     if len(df_final) == 0:
+#         dbars = complete_empty(start, end)
+#         dbars_dict = dbars.to_dict(orient='records') 
+#         return jsonify({'mean': 0, 'data_final': [], 'bars': dbars_dict, 'voladuras': [], 'turnos': [], 'promedios': {}})
+
+#     else:
+#         df_analysis = df_final.copy()
+        
+#         df_analysis['year'] = df_analysis['start'].dt.year
+#         df_analysis['period'] = df_analysis['start'].dt.strftime('%Y-%m')
+#         df_analysis['month'] = df_analysis['start'].dt.month_name()
+#         df_analysis['month'] = df_analysis['month'].replace(['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November','December'], ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto','Septiembre', 'Octubre', 'Noviembre', 'Diciembre'])
+#         df_analysis['nro_month'] = df_analysis['start'].dt.strftime('%m-%Y')
+        
+#         df_analysis['group'] = df_analysis['start'].dt.date.ne(df_analysis['start'].dt.date.shift()).cumsum()
+#         df_analysis['grouping'] = df_analysis['start'].dt.date
+#         df_analysis['hour_start'] = df_analysis['start'].dt.strftime('%H:%M')
+#         df_analysis['hour_end'] = df_analysis['end'].dt.strftime('%H:%M')
+#         df_analysis['transcurred'] = df_analysis['duration'].apply(lambda x: f'{int(x // 60)}h {int(x % 60)}m')
+#         df_analysis['turn'] = df_analysis['start'].apply(lambda x: 'NOCHE' if 5 <= x.hour < 8 else ('DIA' if 17 <= x.hour < 20 else 'OTROS'))
+
+#         df_analysis['DIA'] = df_analysis['turn'].apply(lambda x: 1 if x == 'DIA' else 0)
+#         df_analysis['NOCHE'] = df_analysis['turn'].apply(lambda x: 1 if x == 'NOCHE' else 0)
+#         df_analysis = df_analysis.reset_index(drop=True)
+        
+#         if len(df_analysis) == 0:
+#             dbars = complete_empty(start, end)
+#             dbars_dict = dbars.to_dict(orient='records')
+#             return jsonify({'mean': 0, 'data_final': [], 'bars': dbars_dict, 'voladuras': [], 'turnos': [], 'promedios': {}})
+        
+#         else:
+#             df_voladuras = df_analysis.groupby(['grouping']).agg({'DIA': 'sum', 'NOCHE': 'sum', 'duration': 'sum'}).reset_index()
+#             df_voladuras['DIA'] = df_voladuras['DIA'].apply(lambda x: 1 if x > 0 else 0)
+#             df_voladuras['NOCHE'] = df_voladuras['NOCHE'].apply(lambda x: 1 if x > 0 else 0)
+#             df_voladuras['transcurred'] = df_voladuras['duration'].apply(lambda x: f'{int(x // 60)}h {int(x % 60)}m')
+            
+#             df_voladuras['grouping'] = pd.to_datetime(df_voladuras['grouping'])
+#             df_voladuras = df_voladuras.set_index('grouping')
+#             df_voladuras = df_voladuras.resample('D').asfreq()
+#             df_voladuras['DIA'] = df_voladuras['DIA'].fillna(0)
+#             df_voladuras['NOCHE'] = df_voladuras['NOCHE'].fillna(0)
+#             df_voladuras['duration'] = df_voladuras['duration'].fillna(0)
+#             df_voladuras['transcurred'] = df_voladuras['transcurred'].fillna('0h 0m')
+#             df_voladuras = df_voladuras.reset_index()
+            
+#             df_turn = df_analysis[['grouping', 'hour_start', 'hour_end', 'transcurred', 'duration', 'turn']]
+#             df_turn['min_start'] = df_turn['hour_start'].str.split(':').apply(lambda x: int(x[0]) * 60 + int(x[1]))
+#             df_turn['min_end'] = df_turn['hour_end'].str.split(':').apply(lambda x: int(x[0]) * 60 + int(x[1]))
+
+#             df_turn['duration'] = df_turn['min_end'] - df_turn['min_start']
+#             df_turn['transcurred'] = df_turn['duration'].apply(lambda x: f'{int(x // 60)}h {int(x % 60)}m')
+
+#             df_turn = df_turn.query('turn != "OTROS"')
+
+#             df_dia = df_turn.query('turn == "DIA"')
+#             df_noche = df_turn.query('turn == "NOCHE"')
+            
+#             # HORAS
+#             hour_prom_start_dia = divmod(df_dia['min_start'].mean(), 60)
+#             hour_prom_start_dia = '{:02d}:{:02d}'.format(int(hour_prom_start_dia[0]), int(hour_prom_start_dia[1]))
+#             hour_prom_start_noche = divmod(df_noche['min_start'].mean(), 60)
+#             hour_prom_start_noche = '{:02d}:{:02d}'.format(int(hour_prom_start_noche[0]), int(hour_prom_start_noche[1]))
+
+#             hour_prom_end_dia = divmod(df_dia['min_end'].mean(), 60)
+#             hour_prom_end_dia = '{:02d}:{:02d}'.format(int(hour_prom_end_dia[0]), int(hour_prom_end_dia[1]))
+#             hour_prom_end_noche = divmod(df_noche['min_end'].mean(), 60)
+#             hour_prom_end_noche = '{:02d}:{:02d}'.format(int(hour_prom_end_noche[0]), int(hour_prom_end_noche[1]))
+            
+#             # PROMEDIOS
+#             hour_dia = df_dia['duration'].mean()
+#             mean_dia = f'{int(hour_dia // 60)}h {int(hour_dia % 60)}m'
+#             hour_noche = df_noche['duration'].mean()
+#             mean_noche = f'{int(hour_noche // 60)}h {int(hour_noche % 60)}m'
+            
+#             promedios = {
+#                 'start_dia': hour_prom_start_dia,
+#                 'end_dia': hour_prom_end_dia,
+#                 'transcurred_dia': mean_dia,
+#                 'start_noche': hour_prom_start_noche,
+#                 'end_noche': hour_prom_end_noche,
+#                 'transcurred_noche': mean_noche
+#             }
+            
+#             final_dict = df_final.to_dict('records')
+#             bars_dict = dbars_completed.to_dict('records')
+#             voladuras_dict = df_voladuras.to_dict('records')
+#             turnos_dict = df_turn.to_dict('records')
+            
+#             return jsonify({'mean': mean, 'data_final': final_dict, 'bars': bars_dict, 'voladuras': voladuras_dict, 'turnos': turnos_dict, 'promedios': promedios})
+        
+    # dfinal_dict = df_final.to_dict(orient='records')
+    # dbars_dict = dbars_completed.to_dict(orient='records')
+    # return jsonify({'mean': mean, 'data_final': dfinal_dict, 'bars': dbars_dict})
 
 #region FINAL
 @app.errorhandler(404)
